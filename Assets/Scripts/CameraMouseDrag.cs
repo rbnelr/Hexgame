@@ -3,8 +3,9 @@ using Unity.Mathematics;
 using static Unity.Mathematics.math;
 
 public class CameraMouseDrag : MonoBehaviour {
+	
+	public float3 CamOrbitPos = float3(50, 0, 50);
 
-	//public Plane BackgroundPlane = new Plane(new Vector3(0,1,0), 0);
 	public float MaxGrabDist = 300;
 
 	public float MaxZoomOut = 100f;
@@ -17,19 +18,39 @@ public class CameraMouseDrag : MonoBehaviour {
 	public float BaseFOV = 50f; // vertical
 	public float FOVMultiplier = 1f;
 	
+	public float2 Mouserot = float2(0, 30);
+	public float2 MouselookSens = 1f; // can be used to invert
+
+	public float ZoomTarget = 0.6f; // [0,1] 0 is zoomed out
+	public float Zoom = 0.6f;
+
+	float zoomspeed => ZoomspeedMultiplier * (pow(1 - ZoomTarget, ZoomspeedPow) + 0.2f);
+	
+	float grabHeight;
 	float2 grabPos;
+	bool dragging = false;
+	
+	Ray mouseRay => Camera.main.ScreenPointToRay(Input.mousePosition);
 
-	float zoomTarget = 0.6f; // [0,1] 0 is zoomed out
-	float zoom = 0.6f;
+	void GetGrabPos () {
+		bool hit = Physics.Raycast(mouseRay.origin, mouseRay.direction, out RaycastHit info, MaxGrabDist);
+		if (hit) {
+			grabPos.x = info.point.x;
+			grabHeight = info.point.y;
+			grabPos.y = info.point.z;
+		} else {
+			grabHeight = 0;
 
-	float zoomspeed => ZoomspeedMultiplier * (pow(1 - zoomTarget, ZoomspeedPow) + 0.2f);
+			hit = RaycastMousePos(out grabPos);
+		}
 
-	bool GetMousePos (out float2 pos) {
-		Plane BackgroundPlane = new Plane(new Vector3(0,1,0), 0);
-
-		Ray r = Camera.main.ScreenPointToRay(Input.mousePosition);
-		bool hit = BackgroundPlane.Raycast(r, out float enter);
-		pos = float3(r.origin + r.direction * min(enter, MaxGrabDist)).xz;
+		dragging = hit;
+	}
+	bool RaycastMousePos (out float2 pos) {
+		Plane BackgroundPlane = new Plane(new Vector3(0,1,0), new Vector3(0, grabHeight, 0));
+		bool hit = BackgroundPlane.Raycast(mouseRay, out float enter);
+		
+		pos = float3(mouseRay.origin + mouseRay.direction * min(enter, MaxGrabDist)).xz;
 		return hit;
 	}
 
@@ -39,49 +60,56 @@ public class CameraMouseDrag : MonoBehaviour {
 	}
 
 	void mousegrab () {
-		if (GetMousePos(out float2 curPos)) {
-			if (Input.GetMouseButtonDown(0)) {
-				grabPos = curPos;
-			}
+		if (Input.GetMouseButtonDown(0))
+			GetGrabPos();
+		
+		if (dragging && RaycastMousePos(out float2 curPos)) {
+			float2 diff = (grabPos - curPos);
 
-			if (Input.GetMouseButton(0)) {
-				float2 diff = (grabPos - curPos) * 0.98f;
-
-				transform.Translate(float3(diff.x, 0, diff.y), Space.World);
-			}
-
+			CamOrbitPos += float3(diff.x, 0, diff.y);
 		}
+
+		if (Input.GetMouseButtonUp(0))
+			dragging = false;
 	}
 
+	float camHeight;
 	void mousezoom () {
 		
 		float delta = Input.mouseScrollDelta.y;
 
-		zoomTarget += delta * zoomspeed;
-		zoomTarget = saturate(zoomTarget);
+		ZoomTarget += delta * zoomspeed;
+		ZoomTarget = saturate(ZoomTarget);
 		
-		float animLinear = zoomTarget - zoom;
+		float animLinear = ZoomTarget - Zoom;
 		animLinear = clamp((abs(animLinear) + 0.005f) * Time.deltaTime * ZoomAnimSpeed, 0, abs(animLinear)) * sign(animLinear);
 		
-		zoom += animLinear;
+		Zoom += animLinear;
 		
-		float viewSize = lerp(MaxZoomOut, MaxZoomIn, zoom);
-
+		float viewSize = lerp(MaxZoomOut, MaxZoomIn, Zoom);
+		
 		float baseCamSize = tan(radians(BaseFOV) / 2) * 2;
-		float camHeight = viewSize / baseCamSize;
+		camHeight = viewSize / baseCamSize;
 
-		transform.localPosition = float3(transform.localPosition.x, camHeight, transform.localPosition.z);
-		
 		cam.fieldOfView = BaseFOV * FOVMultiplier;
 	}
 
+	float2 mouseDelta => Input.GetMouseButton(1) ? float2(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y")) : 0;
+	
 	void mouserotate () {
+		Mouserot += mouseDelta * MouselookSens;
+		Mouserot.y = clamp(Mouserot.y, 5, 90);
+		Mouserot.x = Mouserot.x % 360;
 
+		transform.eulerAngles = float3(90 -Mouserot.y, Mouserot.x, 0);
 	}
 
 	void Update () {
-		mousezoom();
-		mousegrab();
 		mouserotate();
+		mousezoom();
+		transform.position = CamOrbitPos - (float3)transform.forward * camHeight; // apply camera position based on rotate and zoom
+
+		mousegrab(); // use new cam pos to raycast
+		transform.position = CamOrbitPos - (float3)transform.forward * camHeight; // apply camera position from dragging
 	}
 }
