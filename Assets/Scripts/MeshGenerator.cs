@@ -9,6 +9,7 @@ public class MeshGenerator : MonoBehaviour {
 	public float HexRadius = 1f; // center to edge
 	public float HexHeight = 1.5f;
 	public float HexBevel = 0.05f;
+	public string MeshName = "HexMesh";
 	
 	void Start () {
 		CalcHex();
@@ -77,7 +78,7 @@ public class MeshGenerator : MonoBehaviour {
 
 		GetComponent<MeshFilter>().mesh = HexMesh;
 
-		AssetDatabase.CreateAsset(HexMesh, "Assets/HexMesh.mesh");
+		AssetDatabase.CreateAsset(HexMesh, "Assets/"+ MeshName +".mesh");
 		AssetDatabase.SaveAssets();
 	}
 }
