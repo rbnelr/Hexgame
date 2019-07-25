@@ -111,7 +111,7 @@ public class WorldGenerator : MonoBehaviour {
 	void SpawnHex (int x, int y, GeneratedHex h) {
 		
 		if (h.type == HexType.Ice)
-			h.height = max(h.height, 0);
+			h.height = max(h.height, 0.05f);
 
 		//if (h.height >= 0) {
 		//	h.height += 0.1f;
@@ -160,18 +160,32 @@ public class WorldGenerator : MonoBehaviour {
 			}
 		}
 
-		float land = LandPercentage / 100f;
+		{ // place water, to match LandPercentage
+			float land = LandPercentage / 100f;
 
-		sortedHexes.Sort((l, r) => {
-			var a = hexes[l.y, l.x];
-			var b = hexes[r.y, r.x];
-			return a.height.CompareTo(b.height);
-		});
+			sortedHexes.Sort((l, r) => {
+				var a = hexes[l.y, l.x];
+				var b = hexes[r.y, r.x];
+				return a.height.CompareTo(b.height);
+			});
 
-		int lowestLandHex = (int)floor(sortedHexes.Count * (1 - land));
+			int lowestLandHex = (int)floor(sortedHexes.Count * (1 - land));
 
-		for (int i=0; i<lowestLandHex; ++i) {
-			hexes[sortedHexes[i].y, sortedHexes[i].x].type = HexType.Water;
+			int2 p = sortedHexes[lowestLandHex];
+			float seaLevel = hexes[p.y, p.x].height;
+			seaLevel -= 0.1f;
+
+			for (int i=0; i<lowestLandHex; ++i) {
+				p = sortedHexes[i];
+				if (hexes[p.y,p.x].type != HexType.Ice) {
+					hexes[p.y,p.x].type = HexType.Water;
+					hexes[p.y,p.x].height = 0.0f;
+				}
+			}
+			for (int i=lowestLandHex; i<sortedHexes.Count; ++i) {
+				p = sortedHexes[i];
+				hexes[p.y,p.x].height -= seaLevel;
+			}
 		}
 
 		for (int y=0; y<Rows; y++) {

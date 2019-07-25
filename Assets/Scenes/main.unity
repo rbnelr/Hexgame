@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 705507994}
-  m_IndirectSpecularColor: {r: 0.44764155, g: 0.4976133, b: 0.57536954, a: 1}
+  m_IndirectSpecularColor: {r: 0.4476422, g: 0.49761403, b: 0.57537055, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -151,11 +151,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6d0baea02db571b4b826a7a53afa76f0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  HexMesh: {fileID: 0}
-  HexRadius: 0.5
-  HexHeight: 1
-  HexBevel: 0.025
-  MeshName: HexMesh
 --- !u!4 &90013622
 Transform:
   m_ObjectHideFlags: 0
@@ -563,12 +558,12 @@ MonoBehaviour:
   Columns: 60
   Rows: 40
   RandomSeed: 1
-  Seed: 1
-  UnitChange: 0.02
+  Seed: 15633
+  UnitChance: 0
   ContinentSize: 20
   LandSize: 15
-  SeaLevel: 0
   IceThickness: 0.05
+  LandPercentage: 20
   Prefabs:
   - type: 0
     prefab: {fileID: 1839400608461145980, guid: 82d6ef4b671b3be478ebb733232abbc2,
@@ -1206,6 +1201,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 04183de68f198554fac5870073eb521f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  DragButton: 0
+  MouselookButton: 1
   CamOrbitPos:
     x: 25
     y: 0
