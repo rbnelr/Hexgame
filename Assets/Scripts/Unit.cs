@@ -1,18 +1,13 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
-public class Unit : MonoBehaviour
-{
-    // Start is called before the first frame update
-    void Start()
-    {
-        
-    }
+public class Unit : MonoBehaviour {
+	public Hex Hex; // Hex the unit currently is on (during movement animations there is a point where it switches hexes
 
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
+	void Start () {
+
+	}
+
+	void Update () {
+
+	}
 }

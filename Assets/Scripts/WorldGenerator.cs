@@ -17,8 +17,12 @@ public class WorldGenerator : MonoBehaviour {
 	public float ContinentSize = 20f;
 	public float LandSize = 20f;
 	public float SeaLevel = 0f;
+	public float IceThickness = 0.05f;
 
 	World world;
+
+	public float _Columns { set { Columns = (int)value; } }
+	public float _Rows { set { Rows = (int)value; } }
 
 	[Serializable]
 	public struct HexTypePrefab {
@@ -56,42 +60,51 @@ public class WorldGenerator : MonoBehaviour {
 		return cyclic_noise(pos, freq, world.Width, seed);
 	}
 	HexType GetType (float2 pos, out float height, out bool unit) {
-		float continent = noise.cellular(float3(pos / ContinentSize, Seed)).y; // distance to voronoi cell edee i think
+		int seed = Seed;
+
+		float continent = noise.cellular(float3(pos / ContinentSize, seed++)).y; // distance to voronoi cell edee i think
 		
 		// use 3d snoise z component for "seed"
 		float land;
-		land  = get_noise(pos, 1f / LandSize,		Seed + 0);
-		land += get_noise(pos, 1f / LandSize * 2,	Seed + 1) / 2;
-		land += get_noise(pos, 1f / LandSize * 4,	Seed + 2) / 8;
+		land  = get_noise(pos, 1f / LandSize,		seed++);
+		land += get_noise(pos, 1f / LandSize * 2,	seed++) / 2;
+		land += get_noise(pos, 1f / LandSize * 4,	seed++) / 8;
 		
 		float mountain;
-		mountain  =  get_noise(pos, 1f / LandSize * 1.5f, Seed + 3) * 0.5f + 0.5f;
-		mountain *= (get_noise(pos, 1f / LandSize * 8.5f, Seed + 4) * 0.5f + 0.5f) * 2;
-		mountain = pow(mountain*2 + 0.7f, 1.4f) * 1;
+		mountain  =  get_noise(pos, 1f / LandSize * 1.5f, seed++) * 0.5f + 0.5f;
+		mountain *= (get_noise(pos, 1f / LandSize * 8.5f, seed++) * 0.5f + 0.5f) * 2;
+		mountain = pow(mountain*2 + 0.7f, 1.3f);
 		
-		land *= mountain;
+		bool mountainous = mountain > 2.5f;
+		bool mountain_spawned = mountainous && get_noise(pos, 1f / 1.5f, seed++) > 0.2f;
 		
+		land *= clamp(mountain, 0.5f, 2f);
+
 		height = land - continent*1.5f + 1f - SeaLevel/100;
 		height /= 2;
 		
-		HexType type;
+		float ice;
+		ice  = get_noise(pos, 1f /   4f, seed++) * 0.5f;
+		ice += get_noise(pos, 1f / 1.3f, seed++) * 1.2f - 0.3f;
+		ice = (world.Height * IceThickness + 1f) - min(pos.y, world.Height - pos.y) + (ice * world.Height * IceThickness);
+
+		HexType type = HexType.Water;
 
 		if (height > 0) {
 			height += 0.1f;
-
-			type = HexType.Land;
-		} else {
-			type = HexType.Water;
+			
+			type = mountain_spawned ? HexType.Mountain : HexType.Land;
+		}
+		
+		if (ice > 0f) {
+			type = HexType.Ice;
+			height = max(height, 0.1f);
 		}
 
 		unit = false;
 		if (type == HexType.Land && UnityEngine.Random.value < UnitChange) {
 			unit = true;
 		}
-		
-		//if (abs(pos.y) > iceLine) {
-		//	type = HexType.Ice;
-		//}
 		
 		return type;
 	}
@@ -113,18 +126,22 @@ public class WorldGenerator : MonoBehaviour {
 				
 				float2 pos = world.GetHexPos(x,y);
 
-				var type = GetType(pos, out float height, out bool unit);
+				var type = GetType(pos, out float height, out bool spawnUnit);
 				
-				var script = Instantiate(PrefabsDict[type], float3(pos.x, 0, pos.y), Quaternion.identity, world.transform).GetComponent<Hex>();
-				script.Type = type;
-				script.Height = type == HexType.Water ? 0 : height;
+				if (type == HexType.Water)
+					height = 0;
 
-				if (unit) {
-					var u = Instantiate(UnitPrefab, script.Center, Quaternion.identity, world.transform).GetComponent<Unit>();
-					script.Unit = u;
+				var ori = Quaternion.AngleAxis(60 * UnityEngine.Random.Range(0, 6), Vector3.up);
+				var hex = Instantiate(PrefabsDict[type], float3(pos.x, height, pos.y), ori, world.transform).GetComponent<Hex>();
+				hex.Type = type;
+
+				if (spawnUnit) {
+					var unit = Instantiate(UnitPrefab, hex.transform, false).GetComponent<Unit>();
+					hex.Unit = unit;
+					unit.Hex = hex;
 				}
 
-				world.Hexes[y,x] = script;
+				world.Hexes[y,x] = hex;
 			}
 		}
 	}

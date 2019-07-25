@@ -27,13 +27,21 @@ public class World : MonoBehaviour {
 
 	void Update () {
 		wrappingTest();
+		mouseSelect();
+	}
 
+	void mouseSelect () {
 		bool hit = Physics.Raycast(Camera.main.ScreenPointToRay(Input.mousePosition), out RaycastHit hitInfo);
-		
+		if (hit) {
+			var hex  = hitInfo.transform.gameObject.GetComponentInParent<Hex>();
+			var unit = hitInfo.transform.gameObject.GetComponentInParent<Unit>();
+			hit = hex || unit;
+
+			if (hit) {
+				SelectionIndicator.transform.position = (hex ?? unit.Hex).transform.position;
+			}
+		}
 		SelectionIndicator.SetActive(hit);
-		if (hit)
-			SelectionIndicator.transform.position = hitInfo.transform.position;
-		
 	}
 
 	public static int wrap (int x, int range, out int divided) { // assumes positive range
