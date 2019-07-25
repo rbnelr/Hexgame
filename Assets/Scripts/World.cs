@@ -20,18 +20,27 @@ public class World : MonoBehaviour {
 	[Range(-100, 100)]
 	public int Wrap = 0;
 	int prevWrap = 0;
+	
+	Camera cam => Camera.main;
+	TopDownCamera _tdcam;
+	TopDownCamera tdcam { get {
+		if (_tdcam == null)
+			_tdcam = cam.GetComponent<TopDownCamera>();
+		return _tdcam;
+	} }
 
 	void Start () {
-
+		
 	}
 
 	void Update () {
-		wrappingTest();
+		UpdateWrapping();
 		mouseSelect();
 	}
 
 	void mouseSelect () {
-		bool hit = Physics.Raycast(Camera.main.ScreenPointToRay(Input.mousePosition), out RaycastHit hitInfo);
+		RaycastHit hitInfo = default;
+		bool hit = Cursor.visible && Physics.Raycast(cam.ScreenPointToRay(Input.mousePosition), out hitInfo);
 		if (hit) {
 			var hex  = hitInfo.transform.gameObject.GetComponentInParent<Hex>();
 			var unit = hitInfo.transform.gameObject.GetComponentInParent<Unit>();
@@ -53,13 +62,16 @@ public class World : MonoBehaviour {
 		}
 		return remainder;
 	}
+	
+	public void UpdateWrapping () {
+		tdcam.MoveInstantly(float3(tdcam.CamOrbitPos.x % Width, tdcam.CamOrbitPos.y, tdcam.CamOrbitPos.z));
+		Wrap = (int)round(tdcam.CamOrbitPos.x);
 
-	void wrappingTest () {
 		if (prevWrap == Wrap)
 			return;
 		prevWrap = Wrap;
 		
-		int wrapped = wrap(Wrap, Columns, out int allOffest);
+		int wrapped = wrap(Wrap - Columns/2, Columns, out int allOffest);
 
 		for (int y=0; y<Rows; y++) {
 			for (int x=0; x<Columns; x++) {
@@ -70,7 +82,7 @@ public class World : MonoBehaviour {
 					offset += 1;
 				pos.x += offset * Width;
 
-				Hexes[y,x].transform.localPosition = float3(pos.x, 0, pos.y);
+				Hexes[y,x].transform.localPosition = float3(pos.x, Hexes[y,x].Height, pos.y);
 			}
 		}
 	}

@@ -2,8 +2,11 @@
 using Unity.Mathematics;
 using static Unity.Mathematics.math;
 
-public class CameraMouseDrag : MonoBehaviour {
+public class TopDownCamera : MonoBehaviour {
 	
+	public int DragButton = 0;
+	public int MouselookButton = 1;
+
 	public float3 CamOrbitPos = float3(50, 0, 50);
 
 	public float MaxGrabDist = 300;
@@ -26,31 +29,41 @@ public class CameraMouseDrag : MonoBehaviour {
 
 	float zoomspeed => ZoomspeedMultiplier * (pow(1 - ZoomTarget, ZoomspeedPow) + 0.2f);
 	
-	float grabHeight;
-	float2 grabPos;
+	float3 grabPos;
 	bool dragging = false;
+
+	public void MoveInstantly (float3 newCamOrbitPos) { // The world controller wants to wrap the camera position.x, but when we are dragging this does not work by simply changing CamOrbitPos
+		float3 offset = newCamOrbitPos - CamOrbitPos;
+		CamOrbitPos = newCamOrbitPos;
+		grabPos += offset;
+
+		applyCamPos(); // reapply cam pos, to prevent script order dependenence (cam will jump on cam move if cam update was called before this)
+	}
+
+	void applyCamPos () {
+		transform.position = CamOrbitPos - (float3)transform.forward * camHeight;
+	}
 	
 	Ray mouseRay => Camera.main.ScreenPointToRay(Input.mousePosition);
 
 	void GetGrabPos () {
 		bool hit = Physics.Raycast(mouseRay.origin, mouseRay.direction, out RaycastHit info, MaxGrabDist);
 		if (hit) {
-			grabPos.x = info.point.x;
-			grabHeight = info.point.y;
-			grabPos.y = info.point.z;
+			grabPos = info.point;
 		} else {
-			grabHeight = 0;
+			grabPos.y = 0;
 
 			hit = RaycastMousePos(out grabPos);
 		}
 
 		dragging = hit;
 	}
-	bool RaycastMousePos (out float2 pos) {
-		Plane BackgroundPlane = new Plane(new Vector3(0,1,0), new Vector3(0, grabHeight, 0));
+	bool RaycastMousePos (out float3 pos) {
+		Plane BackgroundPlane = new Plane(new Vector3(0,1,0), new Vector3(0, grabPos.y, 0));
 		bool hit = BackgroundPlane.Raycast(mouseRay, out float enter);
 		
-		pos = float3(mouseRay.origin + mouseRay.direction * min(enter, MaxGrabDist)).xz;
+		pos = float3(mouseRay.origin + mouseRay.direction * min(enter, MaxGrabDist));
+		pos.y = grabPos.y;
 		return hit;
 	}
 
@@ -60,16 +73,16 @@ public class CameraMouseDrag : MonoBehaviour {
 	}
 
 	void mousegrab () {
-		if (Input.GetMouseButtonDown(0))
+		if (Input.GetMouseButtonDown(DragButton))
 			GetGrabPos();
 		
-		if (dragging && RaycastMousePos(out float2 curPos)) {
-			float2 diff = (grabPos - curPos);
+		if (dragging && RaycastMousePos(out float3 curPos)) {
+			float3 diff = (grabPos - curPos);
 
-			CamOrbitPos += float3(diff.x, 0, diff.y);
+			CamOrbitPos += float3(diff.x, 0, diff.z);
 		}
 
-		if (Input.GetMouseButtonUp(0))
+		if (Input.GetMouseButtonUp(DragButton))
 			dragging = false;
 	}
 
@@ -93,23 +106,29 @@ public class CameraMouseDrag : MonoBehaviour {
 
 		cam.fieldOfView = BaseFOV * FOVMultiplier;
 	}
-
-	float2 mouseDelta => Input.GetMouseButton(1) ? float2(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y")) : 0;
+	
+	float2 mouseDelta => float2(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y"));
 	
 	void mouserotate () {
-		Mouserot += mouseDelta * MouselookSens;
-		Mouserot.y = clamp(Mouserot.y, 5, 90);
-		Mouserot.x = Mouserot.x % 360;
-
+		bool mouselook = Input.GetMouseButton(MouselookButton);
+		
+		Cursor.lockState = mouselook ? CursorLockMode.Confined : CursorLockMode.None;
+		Cursor.visible = !mouselook;
+		
+		if (mouselook) {
+			Mouserot += mouseDelta * MouselookSens;
+			Mouserot.y = clamp(Mouserot.y, 5, 90);
+			Mouserot.x = Mouserot.x % 360;
+		}
 		transform.eulerAngles = float3(90 -Mouserot.y, Mouserot.x, 0);
 	}
 
 	void Update () {
 		mouserotate();
 		mousezoom();
-		transform.position = CamOrbitPos - (float3)transform.forward * camHeight; // apply camera position based on rotate and zoom
+		applyCamPos(); // apply camera position based on rotate and zoom
 
 		mousegrab(); // use new cam pos to raycast
-		transform.position = CamOrbitPos - (float3)transform.forward * camHeight; // apply camera position from dragging
+		applyCamPos(); // apply camera position from dragging
 	}
 }

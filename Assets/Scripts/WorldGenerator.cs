@@ -13,11 +13,11 @@ public class WorldGenerator : MonoBehaviour {
 	public bool RandomSeed = true;
 	public int Seed;
 
-	public float UnitChange;
+	public float UnitChance;
 	public float ContinentSize = 20f;
 	public float LandSize = 20f;
-	public float SeaLevel = 0f;
 	public float IceThickness = 0.05f;
+	public float LandPercentage = 45f;
 
 	World world;
 
@@ -59,10 +59,20 @@ public class WorldGenerator : MonoBehaviour {
 	float get_noise (float2 pos, float freq, int seed) {
 		return cyclic_noise(pos, freq, world.Width, seed);
 	}
-	HexType GetType (float2 pos, out float height, out bool unit) {
+
+	struct GeneratedHex {
+		public float2 pos;
+		public HexType type;
+		public float height;
+		public bool unit;
+	};
+	GeneratedHex GenerateHex (float2 pos) {
+		var hex = new GeneratedHex { pos = pos };
+
 		int seed = Seed;
 
-		float continent = noise.cellular(float3(pos / ContinentSize, seed++)).y; // distance to voronoi cell edee i think
+		//float continent = noise.cellular(float3(pos / ContinentSize, seed++)).y; // distance to voronoi cell edee i think
+		float continent = get_noise(pos, 1f / ContinentSize, seed++) - 1f;
 		
 		// use 3d snoise z component for "seed"
 		float land;
@@ -76,37 +86,56 @@ public class WorldGenerator : MonoBehaviour {
 		mountain = pow(mountain*2 + 0.7f, 1.3f);
 		
 		bool mountainous = mountain > 2.5f;
-		bool mountain_spawned = mountainous && get_noise(pos, 1f / 1.5f, seed++) > 0.2f;
 		
+		hex.type = HexType.Land;
+
+		if (mountainous && get_noise(pos, 1f / 1.5f, seed++) > 0.2f)
+			hex.type = HexType.Mountain;
+
 		land *= clamp(mountain, 0.5f, 2f);
 
-		height = land - continent*1.5f + 1f - SeaLevel/100;
-		height /= 2;
+		hex.height = land + continent;
+		hex.height /= 2;
 		
 		float ice;
 		ice  = get_noise(pos, 1f /   4f, seed++) * 0.5f;
 		ice += get_noise(pos, 1f / 1.3f, seed++) * 1.2f - 0.3f;
 		ice = (world.Height * IceThickness + 1f) - min(pos.y, world.Height - pos.y) + (ice * world.Height * IceThickness);
-
-		HexType type = HexType.Water;
-
-		if (height > 0) {
-			height += 0.1f;
-			
-			type = mountain_spawned ? HexType.Mountain : HexType.Land;
-		}
 		
 		if (ice > 0f) {
-			type = HexType.Ice;
-			height = max(height, 0.1f);
+			hex.type = HexType.Ice;
 		}
 
-		unit = false;
-		if (type == HexType.Land && UnityEngine.Random.value < UnitChange) {
-			unit = true;
-		}
+		return hex;
+	}
+	void SpawnHex (int x, int y, GeneratedHex h) {
 		
-		return type;
+		if (h.type == HexType.Ice)
+			h.height = max(h.height, 0);
+
+		//if (h.height >= 0) {
+		//	h.height += 0.1f;
+		//} else {
+		//	h.type = HexType.Water;
+		//	h.height = 0;
+		//}
+
+		h.unit = false;
+		if (h.type == HexType.Land && UnityEngine.Random.value < UnitChance) {
+			h.unit = true;
+		}
+
+		var ori = Quaternion.AngleAxis(60 * UnityEngine.Random.Range(0, 6), Vector3.up);
+		var hex = Instantiate(PrefabsDict[h.type], float3(h.pos.x, h.height, h.pos.y), ori, world.transform).GetComponent<Hex>();
+		hex.Type = h.type;
+
+		if (h.unit) {
+			var unit = Instantiate(UnitPrefab, hex.transform, false).GetComponent<Unit>();
+			hex.Unit = unit;
+			unit.Hex = hex;
+		}
+
+		world.Hexes[y,x] = hex;
 	}
 
 	public void GenerateWorld () {
@@ -120,29 +149,37 @@ public class WorldGenerator : MonoBehaviour {
 
 		if (RandomSeed)
 			Seed = UnityEngine.Random.Range(0, 2 << 15);
+		
+		var hexes = new GeneratedHex[Rows,Columns];
+		var sortedHexes = new List<int2>(Rows * Columns);
+		
+		for (int y=0; y<Rows; y++) {
+			for (int x=0; x<Columns; x++) {
+				hexes[y,x] = GenerateHex( world.GetHexPos(x,y) );
+				sortedHexes.Add(int2(x,y));
+			}
+		}
+
+		float land = LandPercentage / 100f;
+
+		sortedHexes.Sort((l, r) => {
+			var a = hexes[l.y, l.x];
+			var b = hexes[r.y, r.x];
+			return a.height.CompareTo(b.height);
+		});
+
+		int lowestLandHex = (int)floor(sortedHexes.Count * (1 - land));
+
+		for (int i=0; i<lowestLandHex; ++i) {
+			hexes[sortedHexes[i].y, sortedHexes[i].x].type = HexType.Water;
+		}
 
 		for (int y=0; y<Rows; y++) {
 			for (int x=0; x<Columns; x++) {
-				
-				float2 pos = world.GetHexPos(x,y);
-
-				var type = GetType(pos, out float height, out bool spawnUnit);
-				
-				if (type == HexType.Water)
-					height = 0;
-
-				var ori = Quaternion.AngleAxis(60 * UnityEngine.Random.Range(0, 6), Vector3.up);
-				var hex = Instantiate(PrefabsDict[type], float3(pos.x, height, pos.y), ori, world.transform).GetComponent<Hex>();
-				hex.Type = type;
-
-				if (spawnUnit) {
-					var unit = Instantiate(UnitPrefab, hex.transform, false).GetComponent<Unit>();
-					hex.Unit = unit;
-					unit.Hex = hex;
-				}
-
-				world.Hexes[y,x] = hex;
+				SpawnHex(x,y, hexes[y,x]);
 			}
 		}
+
+		world.UpdateWrapping();
 	}
 }
